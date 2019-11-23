@@ -27,14 +27,15 @@ class PID:
 
 		# grab the current time and calculate delta time
 		self.currTime = time.time()
+#                print('cuurenttime=', self.currTime)
 		deltaTime = self.currTime - self.prevTime
-
+#                print('deltaTime', deltaTime)
 		# delta error
 		deltaError = error - self.prevError
-
+ #               print('deltaerror', deltaError)
 		# proportional term
 		self.cP = error
-
+                
 		# integral term
 		self.cI += error * deltaTime
 

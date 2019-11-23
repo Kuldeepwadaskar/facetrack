@@ -1,5 +1,5 @@
 # USAGE
-# python pan_tilt_tracking.py --cascade haarcascade_frontalface_default.xml
+# sudo  python  pan_tilt_tracking.py --cascade haarcascade_frontalface_default.xml
 
 # import necessary packages
 from multiprocessing import Manager
@@ -7,26 +7,35 @@ from multiprocessing import Process
 from imutils.video import VideoStream
 from pyimagesearch.objcenter import ObjCenter
 from pyimagesearch.pid import PID
-import pantilthat as pth
+import Adafruit_PCA9685 as ada
+#import pantilthat as pth
+
 import argparse
 import signal
 import time
 import sys
 import cv2
+from convert_deg import cnv #angle value to pwm
 
+pwm= ada.PCA9685(address=0x40, busnum=4)
 # define the range for the motors
-servoRange = (-90, 90)
+panServo = (70 , 280)
+tltServo = (120 , 160)
+pwm.set_pwm_freq(25)
+pwm.set_pwm(3, 0, 150) #pan
+pwm.set_pwm(13, 0, 150) #tilt
 
+#pwm.set_pwm(1, 0,100)
 # function to handle keyboard interrupt
 def signal_handler(sig, frame):
 	# print a status message
 	print("[INFO] You pressed `ctrl + c`! Exiting...")
 
-	# disable the servos
-	pth.servo_enable(1, False)
-	pth.servo_enable(2, False)
+	# disable the servos pth.servo_enable(1, False)
+	#pth.servo_enable(2, False)
 
 	# exit
+
 	sys.exit()
 
 def obj_center(args, objX, objY, centerX, centerY):
@@ -36,7 +45,8 @@ def obj_center(args, objX, objY, centerX, centerY):
 	# start the video stream and wait for the camera to warm up
 	vs = VideoStream(usePiCamera=True).start()
 	time.sleep(2.0)
-
+        #cap.set(3 , 640)
+	#cap.set(4 , 480)
 	# initialize the object center finder
 	obj = ObjCenter(args["cascade"])
 
@@ -45,7 +55,7 @@ def obj_center(args, objX, objY, centerX, centerY):
 		# grab the frame from the threaded video stream and flip it
 		# vertically (since our camera was upside down)
 		frame = vs.read()
-		frame = cv2.flip(frame, 0)
+		#frame = cv2.flip(frame, 0)
 
 		# calculate the center of the frame as this is where we will
 		# try to keep the object
@@ -60,9 +70,7 @@ def obj_center(args, objX, objY, centerX, centerY):
 		# extract the bounding box and draw it
 		if rect is not None:
 			(x, y, w, h) = rect
-			cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0),
-				2)
-
+			cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0),5)
 		# display the frame to the screen
 		cv2.imshow("Pan-Tilt Face Tracking", frame)
 		cv2.waitKey(1)
@@ -79,10 +87,11 @@ def pid_process(output, p, i, d, objCoord, centerCoord):
 	while True:
 		# calculate the error
 		error = centerCoord.value - objCoord.value
+        #        print('error=', error)
 
 		# update the value
 		output.value = p.update(error)
-
+                print('update=', output.value)
 def in_range(val, start, end):
 	# determine the input vale is in the supplied range
 	return (val >= start and val <= end)
@@ -94,16 +103,23 @@ def set_servos(pan, tlt):
 	# loop indefinitely
 	while True:
 		# the pan and tilt angles are reversed
-		panAngle = -1 * pan.value
-		tltAngle = -1 * tlt.value
+         	panAngle =  int(pan.value)
+                panAngle = cnv(panAngle)
+                print('panAngle=', panAngle)
+		tltAngle = int(tlt.value)
+		tltAngle= cnv(tltAngle)
+                print('tltAngle=', tltAngle)
 
 		# if the pan angle is within the range, pan
-		if in_range(panAngle, servoRange[0], servoRange[1]):
-			pth.pan(panAngle)
+		if in_range(panAngle, panServo[0], panServo[1]):
+			 #pth.pan(panAngle)
+			#panAngle = cnv(panAngle)
+                        pwm.set_pwm(3, 0, panAngle)
 
 		# if the tilt angle is within the range, tilt
-		if in_range(tltAngle, servoRange[0], servoRange[1]):
-			pth.tilt(tltAngle)
+		if in_range(tltAngle, tltServo[0], tltServo[1]):
+			#tltAngle= cnv(tltAngle)
+                        pwm.set_pwm(13, 0, tltAngle)
 
 # check to see if this is the main body of execution
 if __name__ == "__main__":
@@ -116,8 +132,8 @@ if __name__ == "__main__":
 	# start a manager for managing process-safe variables
 	with Manager() as manager:
 		# enable the servos
-		pth.servo_enable(1, True)
-		pth.servo_enable(2, True)
+		#pth.servo_enable(1, True)
+		#pth.servo_enable(2, True)
 
 		# set integer values for the object center (x, y)-coordinates
 		centerX = manager.Value("i", 0)
@@ -128,9 +144,10 @@ if __name__ == "__main__":
 		objY = manager.Value("i", 0)
 
 		# pan and tilt values will be managed by independed PIDs
-		pan = manager.Value("i", 0)
-		tlt = manager.Value("i", 0)
-
+		pan = manager.Value("i", 90)
+                print(pan)
+		tlt = manager.Value("i", 90)
+                print(tlt)
 		# set PID values for panning
 		panP = manager.Value("f", 0.09)
 		panI = manager.Value("f", 0.08)
@@ -168,5 +185,5 @@ if __name__ == "__main__":
 		processSetServos.join()
 
 		# disable the servos
-		pth.servo_enable(1, False)
-		pth.servo_enable(2, False)
+		#pth.servo_enable(1, False)
+		#pth.servo_enable(2, False)
